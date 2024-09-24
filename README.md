@@ -13,7 +13,7 @@
 You can install GroupGit quickly using the following command:
 
 ```bash
-curl -sL https://github.com/M-Agoumi/GroupGit/raw/main/install_groupgit.sh | sh
+curl -sL https://raw.githubusercontent.com/M-Agoumi/GroupGit/refs/heads/master/install.sh | sh
 ```
 
 This command will download and execute the installer script directly, setting up GroupGit as a command you can use from anywhere on your system.
