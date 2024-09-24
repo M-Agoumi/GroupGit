@@ -25,7 +25,7 @@ If you prefer to install manually:
 1. Clone this repository:
    ```bash
    git clone https://github.com/M-Agoumi/GroupGit.git
-   cd yourrepository
+   cd GroupGit
    ```
 
 2. Run the installer script:
