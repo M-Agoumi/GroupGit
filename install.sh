@@ -10,39 +10,42 @@ RESET='\033[0m'
 
 # Define variables
 INSTALL_DIR="$HOME/.local/bin"     # Directory to install the script, commonly in PATH for user executables
-SCRIPT_NAME="groupgit.sh"          # Name of the script file
+SCRIPT_NAME="groupgit.sh"          # Name of the script file in GitHub
 LINK_NAME="groupgit"               # Command name you want to use
+GITHUB_URL="https://raw.githubusercontent.com/M-Agoumi/GroupGit/refs/heads/master/$SCRIPT_NAME"  # URL to download the script
 
 # Create the install directory if it doesn't exist
 mkdir -p "$INSTALL_DIR"
 
-# Check if the script exists in the current directory
-if [ ! -f "$SCRIPT_NAME" ]; then
-    echo "${RED}Error: ${SCRIPT_NAME} not found in the current directory. Please make sure the script is here.${RESET}"
+# Download the script from GitHub
+echo "${CYAN}Downloading $SCRIPT_NAME from GitHub...${RESET}"
+curl -sL "$GITHUB_URL" -o "$INSTALL_DIR/$LINK_NAME"
+
+# Check if the download was successful
+if [ $? -ne 0 ] || [ ! -f "$INSTALL_DIR/$LINK_NAME" ]; then
+    echo "${RED}Error: Failed to download ${SCRIPT_NAME}. Please check your internet connection and the URL.${RESET}"
     exit 1
 fi
-
-# Copy the script to the install directory with the desired command name
-cp "$SCRIPT_NAME" "$INSTALL_DIR/$LINK_NAME"
 
 # Make the script executable
 chmod +x "$INSTALL_DIR/$LINK_NAME"
 
-# Ensure that ~/.local/bin is in the PATH
-if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
-    # Determine which shell configuration file to update
-    if [ -n "$ZSH_VERSION" ]; then
-        SHELL_RC="$HOME/.zshrc"
-    elif [ -n "$BASH_VERSION" ]; then
-        SHELL_RC="$HOME/.bashrc"
-    else
-        SHELL_RC="$HOME/.profile"
-    fi
+# Detect which shell configuration file to update based on the active shell
+if [ -n "$ZSH_VERSION" ] || [ "$(basename "$SHELL")" = "zsh" ]; then
+    SHELL_RC="$HOME/.zshrc"
+elif [ -n "$BASH_VERSION" ] || [ "$(basename "$SHELL")" = "bash" ]; then
+    SHELL_RC="$HOME/.bashrc"
+else
+    SHELL_RC="$HOME/.profile"
+fi
 
-    # Add the directory to the PATH in the shell configuration file
+# Add the directory to the PATH in the shell configuration file if not already added
+if ! grep -qx "export PATH=\"$INSTALL_DIR:\$PATH\"" "$SHELL_RC"; then
     echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$SHELL_RC"
     echo "${YELLOW}Added $INSTALL_DIR to PATH in $SHELL_RC.${RESET}"
     echo "${CYAN}Restart your terminal or run 'source $SHELL_RC' to update your PATH.${RESET}"
+else
+    echo "${GREEN}$INSTALL_DIR is already in the PATH in $SHELL_RC.${RESET}"
 fi
 
 echo "${GREEN}GroupGit installed successfully!${RESET}"
