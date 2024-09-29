@@ -33,7 +33,11 @@ init() {
 
     # Create the configuration file with a sample repository entry
     echo "# List your repositories here in the format: <name> <repo_url>" > "$CONFIG_FILE"
+    echo "# Add [groupName] to group a set of repos" >> "$CONFIG_FILE"
+    echo "[backend]" >> "$CONFIG_FILE"
     echo "SampleRepo https://github.com/user/sample-repo.git" >> "$CONFIG_FILE"
+    echo "[frontend]" >> "$CONFIG_FILE"
+    echo "SampleRepoB https://github.com/user/sample-repo-b.git" >> "$CONFIG_FILE"
     echo "${GREEN}Initialized configuration file '${YELLOW}$CONFIG_FILE${GREEN}'.${RESET}"
     echo "${CYAN}You can edit this file to add your repositories.${RESET}"
 
@@ -58,8 +62,11 @@ init() {
     echo "${GREEN}Initial commit created with '${YELLOW}$CONFIG_FILE${GREEN}' and '.gitignore'.${RESET}"
 }
 
-# Function to clone repositories listed in the configuration file
+# Function to clone repositories listed in the configuration file, optionally filtered by group
 clone() {
+    local group_filter="$1"
+    local in_group=0
+
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
         exit 1
@@ -71,21 +78,37 @@ clone() {
             \#* | "") continue ;;
         esac
 
-        # Read repository name and URL
-        repo_name=$(echo "$line" | awk '{print $1}')
-        repo_url=$(echo "$line" | awk '{print $2}')
+        # Check if this line is a group declaration (e.g., [groupName])
+        if echo "$line" | grep -q "^\["; then
+            current_group=$(echo "$line" | tr -d '[]')
+            if [ "$group_filter" = "$current_group" ]; then
+                in_group=1
+            else
+                in_group=0
+            fi
+            continue
+        fi
 
-        if [ -d "$repo_name" ]; then
-            echo "Repository '$repo_name' already exists. Skipping clone."
-        else
-            echo "Cloning '$repo_name' from '$repo_url'..."
-            git clone "$repo_url" "$repo_name"
+        # If in a group and group matches (or no group filter is set), clone the repo
+        if [ "$in_group" -eq 1 ] || [ -z "$group_filter" ]; then
+            repo_name=$(echo "$line" | awk '{print $1}')
+            repo_url=$(echo "$line" | awk '{print $2}')
+
+            if [ -d "$repo_name" ]; then
+                echo "Repository '$repo_name' already exists. Skipping clone."
+            else
+                echo "Cloning '$repo_name' from '$repo_url'..."
+                git clone "$repo_url" "$repo_name"
+            fi
         fi
     done < "$CONFIG_FILE"
 }
 
-# Function to update repositories by pulling the latest changes
+# Function to update repositories by pulling the latest changes, optionally filtered by group
 update() {
+    local group_filter="$1"
+    local in_group=0
+
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
         exit 1
@@ -97,16 +120,29 @@ update() {
             \#* | "") continue ;;
         esac
 
-        # Read repository name
-        repo_name=$(echo "$line" | awk '{print $1}')
+        # Check if this line is a group declaration (e.g., [groupName])
+        if echo "$line" | grep -q "^\["; then
+            current_group=$(echo "$line" | tr -d '[]')
+            if [ "$group_filter" = "$current_group" ]; then
+                in_group=1
+            else
+                in_group=0
+            fi
+            continue
+        fi
 
-        if [ -d "$repo_name" ]; then
-            echo "Updating repository '$repo_name'..."
-            cd "$repo_name" || exit
-            git pull
-            cd ..
-        else
-            echo "Repository '$repo_name' does not exist. Skipping update."
+        # If in a group and group matches (or no group filter is set), update the repo
+        if [ "$in_group" -eq 1 ] || [ -z "$group_filter" ]; then
+            repo_name=$(echo "$line" | awk '{print $1}')
+
+            if [ -d "$repo_name" ]; then
+                echo "Updating repository '$repo_name'..."
+                cd "$repo_name" || exit
+                git pull
+                cd ..
+            else
+                echo "Repository '$repo_name' does not exist. Skipping update."
+            fi
         fi
     done < "$CONFIG_FILE"
 }
@@ -117,13 +153,13 @@ case "$1" in
         init
         ;;
     clone)
-        clone
+        clone "$2"  # Pass the second argument as the group filter
         ;;
     update)
-        update
+        update "$2"  # Pass the second argument as the group filter
         ;;
     *)
         header
-        echo "Usage: $0 {init|clone|update}"
+        echo "Usage: $0 {init|clone|update} [group]"
         ;;
 esac
