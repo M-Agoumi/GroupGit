@@ -84,6 +84,33 @@ clone() {
     done < "$CONFIG_FILE"
 }
 
+# Function to update repositories by pulling the latest changes
+update() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
+        exit 1
+    fi
+
+    while IFS= read -r line; do
+        # Skip lines starting with '#' (comments) or empty lines
+        case "$line" in
+            \#* | "") continue ;;
+        esac
+
+        # Read repository name
+        repo_name=$(echo "$line" | awk '{print $1}')
+
+        if [ -d "$repo_name" ]; then
+            echo "Updating repository '$repo_name'..."
+            cd "$repo_name" || exit
+            git pull
+            cd ..
+        else
+            echo "Repository '$repo_name' does not exist. Skipping update."
+        fi
+    done < "$CONFIG_FILE"
+}
+
 # Main function to handle user commands
 case "$1" in
     init)
@@ -92,8 +119,11 @@ case "$1" in
     clone)
         clone
         ;;
+    update)
+        update
+        ;;
     *)
         header
-        echo "Usage: $0 {init|clone}"
+        echo "Usage: $0 {init|clone|update}"
         ;;
 esac
