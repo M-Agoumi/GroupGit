@@ -62,13 +62,69 @@ init() {
     echo "${GREEN}Initial commit created with '${YELLOW}$CONFIG_FILE${GREEN}' and '.gitignore'.${RESET}"
 }
 
+# Function to calculate a basic string distance (alternative to Levenshtein)
+string_distance() {
+    s1="$1"
+    s2="$2"
+    dist=0
+    len1=${#s1}
+    len2=${#s2}
+
+    max_len=$((len1 > len2 ? len1 : len2))
+
+    for i in $(seq 1 "$max_len"); do
+        char1=$(echo "$s1" | cut -c"$i")
+        char2=$(echo "$s2" | cut -c"$i")
+
+        if [ "$char1" != "$char2" ]; then
+            dist=$((dist + 1))
+        fi
+    done
+
+    echo "$dist"
+}
+
+# Function to find close group suggestions
+suggest_group() {
+    input_group="$1"
+    closest_group=""
+    closest_distance=999
+    group_list=$(grep "^\[" "$CONFIG_FILE" | sed 's/^\[\(.*\)\]$/\1/')  # Extract groups using sed
+
+    for group_name in $group_list; do
+        distance=$(string_distance "$input_group" "$group_name")
+        if [ "$distance" -lt "$closest_distance" ]; then
+            closest_distance="$distance"
+            closest_group="$group_name"
+        fi
+    done
+
+    echo "$closest_group"
+}
+
+# Function to check if a group exists
+group_exists() {
+    group="$1"
+    grep -q "^\[$group\]" "$CONFIG_FILE"
+}
+
 # Function to clone repositories listed in the configuration file, optionally filtered by group
 clone() {
-    local group_filter="$1"
-    local in_group=0
+    group_filter="$1"
+    in_group=0
 
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
+        exit 1
+    fi
+
+    # Check if the group exists
+    if [ -n "$group_filter" ] && ! group_exists "$group_filter"; then
+        echo "${RED}Error:${RESET} Group '${YELLOW}$group_filter${RESET}' does not exist."
+        suggestion=$(suggest_group "$group_filter")
+        if [ -n "$suggestion" ]; then
+            echo "${CYAN}Did you mean '${GREEN}$suggestion${CYAN}'?${RESET}"
+        fi
         exit 1
     fi
 
@@ -106,11 +162,21 @@ clone() {
 
 # Function to update repositories by pulling the latest changes, optionally filtered by group
 update() {
-    local group_filter="$1"
-    local in_group=0
+    group_filter="$1"
+    in_group=0
 
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
+        exit 1
+    fi
+
+    # Check if the group exists
+    if [ -n "$group_filter" ] && ! group_exists "$group_filter"; then
+        echo "${RED}Error:${RESET} Group '${YELLOW}$group_filter${RESET}' does not exist."
+        suggestion=$(suggest_group "$group_filter")
+        if [ -n "$suggestion" ]; then
+            echo "${CYAN}Did you mean '${GREEN}$suggestion${CYAN}'?${RESET}"
+        fi
         exit 1
     fi
 
