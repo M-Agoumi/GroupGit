@@ -213,7 +213,62 @@ update() {
     done < "$CONFIG_FILE"
 }
 
+# Function to stash changes in repositories, optionally filtered by group
+stash() {
+    group_filter="$1"
+    in_group=0
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Configuration file '$CONFIG_FILE' not found. Please run 'init' first."
+        exit 1
+    fi
+
+    # Check if the group exists
+    if [ -n "$group_filter" ] && ! group_exists "$group_filter"; then
+        echo "${RED}Error:${RESET} Group '${YELLOW}$group_filter${RESET}' does not exist."
+        suggestion=$(suggest_group "$group_filter")
+        if [ -n "$suggestion" ]; then
+            echo "${CYAN}Did you mean '${GREEN}$suggestion${CYAN}'?${RESET}"
+        fi
+        exit 1
+    fi
+
+    while IFS= read -r line; do
+        # Skip lines starting with '#' (comments) or empty lines
+        case "$line" in
+            \#* | "") continue ;;
+        esac
+
+        # Check if this line is a group declaration (e.g., [groupName])
+        if echo "$line" | grep -q "^\["; then
+            current_group=$(echo "$line" | tr -d '[]')
+            if [ "$group_filter" = "$current_group" ]; then
+                in_group=1
+            else
+                in_group=0
+            fi
+            continue
+        fi
+
+        # If in a group and group matches (or no group filter is set), stash the changes
+        if [ "$in_group" -eq 1 ] || [ -z "$group_filter" ]; then
+            repo_name=$(echo "$line" | awk '{print $1}')
+            if [ -d "$repo_name" ]; then
+                echo "Stashing changes in '$repo_name'..."
+                cd "$repo_name" || exit
+                git stash
+                cd ..
+            else
+                echo "Repository '$repo_name' does not exist. Skipping stash."
+            fi
+        fi
+    done < "$CONFIG_FILE"
+}
+
+
+
 # Main function to handle user commands
+# @todo: stash list, stash view, upgrade (version using github tags)
 case "$1" in
     init)
         init
@@ -222,10 +277,13 @@ case "$1" in
         clone "$2"  # Pass the second argument as the group filter
         ;;
     update)
-        update "$2"  # Pass the second argument as the group filter
+        update "$2"
+        ;;
+    stash)
+        stash "$2"
         ;;
     *)
         header
-        echo "Usage: $0 {init|clone|update} [group]"
+        echo "Usage: groupgit {init|clone|update|stash} [group]"
         ;;
 esac
