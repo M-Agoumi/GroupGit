@@ -215,7 +215,8 @@ update() {
 
 # Function to stash changes in repositories, optionally filtered by group
 stash() {
-    group_filter="$1"
+    command="$1"       # The second argument to specify the command
+    group_filter="$2"  # The first argument for the group filter
     in_group=0
 
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -223,7 +224,12 @@ stash() {
         exit 1
     fi
 
-    # Check if the group exists
+    # If no command is specified, default to 'all'
+    if [ "$command" != "view" ]; then
+        command="all"
+    fi
+
+    # Check if the group exists, but only if a group filter is provided
     if [ -n "$group_filter" ] && ! group_exists "$group_filter"; then
         echo "${RED}Error:${RESET} Group '${YELLOW}$group_filter${RESET}' does not exist."
         suggestion=$(suggest_group "$group_filter")
@@ -233,42 +239,88 @@ stash() {
         exit 1
     fi
 
-    while IFS= read -r line; do
-        # Skip lines starting with '#' (comments) or empty lines
-        case "$line" in
-            \#* | "") continue ;;
-        esac
+    case "$command" in
+        view)
+            echo "Repositories with active stashes:"
+            while IFS= read -r line; do
+                # Skip lines starting with '#' (comments) or empty lines
+                case "$line" in
+                    \#* | "") continue ;;
+                esac
 
-        # Check if this line is a group declaration (e.g., [groupName])
-        if echo "$line" | grep -q "^\["; then
-            current_group=$(echo "$line" | tr -d '[]')
-            if [ "$group_filter" = "$current_group" ]; then
-                in_group=1
-            else
-                in_group=0
-            fi
-            continue
-        fi
+                # Check if this line is a group declaration (e.g., [groupName])
+                if echo "$line" | grep -q "^\["; then
+                    current_group=$(echo "$line" | tr -d '[]')
+                    if [ "$group_filter" = "$current_group" ]; then
+                        in_group=1
+                    else
+                        in_group=0
+                    fi
+                    continue
+                fi
 
-        # If in a group and group matches (or no group filter is set), stash the changes
-        if [ "$in_group" -eq 1 ] || [ -z "$group_filter" ]; then
-            repo_name=$(echo "$line" | awk '{print $1}')
-            if [ -d "$repo_name" ]; then
-                echo "Stashing changes in '$repo_name'..."
-                cd "$repo_name" || exit
-                git stash
-                cd ..
-            else
-                echo "Repository '$repo_name' does not exist. Skipping stash."
-            fi
-        fi
-    done < "$CONFIG_FILE"
+                # If group is specified, check if the repo is in that group
+                if [ -n "$group_filter" ] && [ "$in_group" -eq 0 ]; then
+                    continue
+                fi
+
+                # Check for active stash in the repo
+                repo_name=$(echo "$line" | awk '{print $1}')
+                if [ -d "$repo_name" ]; then
+                    cd "$repo_name" || continue
+                    if git stash list | grep -q "stash@{"; then
+                        echo " - $repo_name has active changes."
+                    fi
+                    cd ..
+                else
+                    echo "Repository '$repo_name' does not exist. Skipping check."
+                fi
+            done < "$CONFIG_FILE"
+            ;;
+
+        all)
+            while IFS= read -r line; do
+                # Skip lines starting with '#' (comments) or empty lines
+                case "$line" in
+                    \#* | "") continue ;;
+                esac
+
+                # Check if this line is a group declaration (e.g., [groupName])
+                if echo "$line" | grep -q "^\["; then
+                    current_group=$(echo "$line" | tr -d '[]')
+                    if [ "$group_filter" = "$current_group" ]; then
+                        in_group=1
+                    else
+                        in_group=0
+                    fi
+                    continue
+                fi
+
+                # If in a group and group matches (or no group filter is set), stash the changes
+                if [ "$in_group" -eq 1 ] || [ -z "$group_filter" ]; then
+                    repo_name=$(echo "$line" | awk '{print $1}')
+                    if [ -d "$repo_name" ]; then
+                        echo "Stashing changes in '$repo_name'..."
+                        cd "$repo_name" || exit
+                        git stash
+                        cd ..
+                    else
+                        echo "Repository '$repo_name' does not exist. Skipping stash."
+                    fi
+                fi
+            done < "$CONFIG_FILE"
+            ;;
+
+        *)
+            echo "Invalid stash command. Use 'view' to see stashed repos or 'all' to stash all changes."
+            ;;
+    esac
 }
 
 
 
 # Main function to handle user commands
-# @todo: stash list, stash view, upgrade (version using github tags)
+# @todo: upgrade (version using github tags)
 case "$1" in
     init)
         init
@@ -280,10 +332,11 @@ case "$1" in
         update "$2"
         ;;
     stash)
-        stash "$2"
+        stash "$2" "$3"  # Pass group and subcommand
         ;;
     *)
         header
-        echo "Usage: groupgit {init|clone|update|stash} [group]"
+        echo "Usage: groupgit {init|clone|update|stash [view|all]} [group]"
         ;;
 esac
+
