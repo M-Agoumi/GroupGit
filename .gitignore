@@ -1,4 +1,7 @@
-# Ignore everything except the configuration file
+.idea
+repos.txt
+A
+B# Ignore everything except the configuration file
 *
 !repos.txt
 !.gitignore
